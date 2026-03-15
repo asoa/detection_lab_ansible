@@ -1,6 +1,0 @@
-name: offsec
-
-infra:
-  provider: bicep
-  path: infra 
-  module: dev
