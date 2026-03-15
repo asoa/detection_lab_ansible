@@ -1,0 +1,8 @@
+---
+- name: Configure the enterprise domain controller
+  hosts: localhost
+  gather_facts: false
+  connection: local
+  roles:
+    - role: adds
+...

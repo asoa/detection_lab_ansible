@@ -1,0 +1,116 @@
+# SPDX-License-Identifier: MIT-0
+---
+- name: Ensure the enterprise bootstrap log directory exists
+  ansible.builtin.command:
+    argv:
+      - powershell.exe
+      - -NoProfile
+      - -NonInteractive
+      - -ExecutionPolicy
+      - Bypass
+      - -Command
+      - |
+        New-Item -Path '{{ adds_log_directory }}' -ItemType Directory -Force | Out-Null
+  changed_when: false
+
+- name: Detect whether the host is already a domain controller
+  ansible.builtin.command:
+    argv:
+      - powershell.exe
+      - -NoProfile
+      - -NonInteractive
+      - -ExecutionPolicy
+      - Bypass
+      - -Command
+      - |
+        $domainRole = (Get-CimInstance Win32_ComputerSystem).DomainRole
+        if ($domainRole -ge 4) {
+          'present'
+        }
+        else {
+          'absent'
+        }
+  register: adds_domain_controller_state
+  changed_when: false
+
+- name: Ensure the AD DS Windows feature is installed
+  ansible.builtin.command:
+    argv:
+      - powershell.exe
+      - -NoProfile
+      - -NonInteractive
+      - -ExecutionPolicy
+      - Bypass
+      - -Command
+      - |
+        $feature = Get-WindowsFeature -Name AD-Domain-Services
+        if ($feature.InstallState -eq 'Installed') {
+          'unchanged'
+        }
+        else {
+          Install-WindowsFeature -Name AD-Domain-Services -IncludeManagementTools | Out-Null
+          'changed'
+        }
+  register: adds_feature_install
+  changed_when: "'changed' in adds_feature_install.stdout"
+
+- name: Ensure a DSRM safe mode password is available for the first forest promotion
+  ansible.builtin.command:
+    argv:
+      - powershell.exe
+      - -NoProfile
+      - -NonInteractive
+      - -ExecutionPolicy
+      - Bypass
+      - -Command
+      - |
+        if (Test-Path '{{ adds_safe_mode_password_path }}') {
+          'unchanged'
+        }
+        else {
+          $password = ([guid]::NewGuid().ToString('N') + 'Aa!9')
+          Set-Content -Path '{{ adds_safe_mode_password_path }}' -Value $password -NoNewline
+          'changed'
+        }
+  register: adds_safe_mode_password
+  changed_when: "'changed' in adds_safe_mode_password.stdout"
+
+- name: Promote the host into a new forest when AD DS is not yet configured
+  ansible.builtin.command:
+    argv:
+      - powershell.exe
+      - -NoProfile
+      - -NonInteractive
+      - -ExecutionPolicy
+      - Bypass
+      - -Command
+      - |
+        $safeModePassword = ConvertTo-SecureString (Get-Content '{{ adds_safe_mode_password_path }}' -Raw) -AsPlainText -Force
+        Install-ADDSForest `
+          -DomainName '{{ adds_domain_name }}' `
+          -DomainNetbiosName '{{ adds_domain_netbios_name }}' `
+          -InstallDNS:$true `
+          -SafeModeAdministratorPassword $safeModePassword `
+          -Force:$true `
+          -NoRebootOnCompletion:$true
+        Set-Content -Path '{{ adds_pending_reboot_marker }}' -Value 'pending reboot for domain promotion' -NoNewline
+        'changed'
+  register: adds_forest_install
+  changed_when: "'changed' in adds_forest_install.stdout"
+  when: "'absent' in adds_domain_controller_state.stdout"
+
+- name: Remove the pending reboot marker after the domain controller is available
+  ansible.builtin.command:
+    argv:
+      - powershell.exe
+      - -NoProfile
+      - -NonInteractive
+      - -ExecutionPolicy
+      - Bypass
+      - -Command
+      - |
+        if (Test-Path '{{ adds_pending_reboot_marker }}') {
+          Remove-Item -Path '{{ adds_pending_reboot_marker }}' -Force
+        }
+  changed_when: false
+  when: "'present' in adds_domain_controller_state.stdout"
