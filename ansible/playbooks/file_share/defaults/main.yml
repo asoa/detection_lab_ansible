@@ -1,0 +1,9 @@
+# SPDX-License-Identifier: MIT-0
+---
+file_share_name: "{{ share_name | default('Engineering') }}"
+file_share_path: "C:\\Shares\\{{ file_share_name }}"
+file_share_description: 'Engineering department shared data'
+file_share_full_access:
+  - Administrators
+file_share_change_access:
+  - 'Authenticated Users'

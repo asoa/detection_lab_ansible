@@ -1,0 +1,71 @@
+# SPDX-License-Identifier: MIT-0
+---
+- name: Ensure the file server feature is installed
+  ansible.builtin.command:
+    argv:
+      - powershell.exe
+      - -NoProfile
+      - -NonInteractive
+      - -ExecutionPolicy
+      - Bypass
+      - -Command
+      - |
+        $feature = Get-WindowsFeature -Name FS-FileServer
+        if ($feature.InstallState -eq 'Installed') {
+          'unchanged'
+        }
+        else {
+          Install-WindowsFeature -Name FS-FileServer | Out-Null
+          'changed'
+        }
+  register: file_share_feature_install
+  changed_when: "'changed' in file_share_feature_install.stdout"
+
+- name: Ensure the SMB share path exists
+  ansible.builtin.command:
+    argv:
+      - powershell.exe
+      - -NoProfile
+      - -NonInteractive
+      - -ExecutionPolicy
+      - Bypass
+      - -Command
+      - |
+        if (Test-Path '{{ file_share_path }}') {
+          'unchanged'
+        }
+        else {
+          New-Item -Path '{{ file_share_path }}' -ItemType Directory -Force | Out-Null
+          'changed'
+        }
+  register: file_share_directory
+  changed_when: "'changed' in file_share_directory.stdout"
+
+- name: Ensure the SMB share exists with the expected access model
+  ansible.builtin.command:
+    argv:
+      - powershell.exe
+      - -NoProfile
+      - -NonInteractive
+      - -ExecutionPolicy
+      - Bypass
+      - -Command
+      - |
+        $share = Get-SmbShare -Name '{{ file_share_name }}' -ErrorAction SilentlyContinue
+        $fullAccess = @({{ file_share_full_access | map('to_json') | join(', ') }})
+        $changeAccess = @({{ file_share_change_access | map('to_json') | join(', ') }})
+        if ($null -eq $share) {
+          New-SmbShare `
+            -Name '{{ file_share_name }}' `
+            -Path '{{ file_share_path }}' `
+            -Description '{{ file_share_description }}' `
+            -FullAccess $fullAccess `
+            -ChangeAccess $changeAccess | Out-Null
+          'changed'
+        }
+        else {
+          Set-SmbShare -Name '{{ file_share_name }}' -Description '{{ file_share_description }}' -Force | Out-Null
+          'unchanged'
+        }
+  register: file_share_smb
+  changed_when: "'changed' in file_share_smb.stdout"
