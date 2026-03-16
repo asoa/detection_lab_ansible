@@ -1,8 +1,12 @@
 ---
 - name: Configure the enterprise file share host
-  hosts: localhost
+  hosts: file_shares
   gather_facts: false
-  connection: local
+  vars:
+    ansible_connection: winrm
+    ansible_winrm_transport: ntlm
+    ansible_winrm_server_cert_validation: ignore
+    ansible_port: "{{ hostvars[inventory_hostname].ansible_port | default(5986) }}"
   roles:
     - role: file_share
 ...
