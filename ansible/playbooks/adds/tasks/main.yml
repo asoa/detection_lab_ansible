@@ -60,18 +60,11 @@
   when: "'absent' in adds_domain_controller_state.stdout"
 
 - name: Reboot after initial domain promotion
-  ansible.builtin.raw: |
-    Restart-Computer -Force
-  async: 10
-  poll: 0
-  when: "'changed' in adds_forest_install.stdout"
-
-- name: Wait for host after domain promotion reboot
-  ansible.builtin.wait_for_connection:
-    timeout: 1800
-    sleep: 15
-    delay: 30
-  when: "'changed' in adds_forest_install.stdout"
+  ansible.windows.win_reboot:
+    reboot_timeout: 1800
+    connect_timeout: 30
+    post_reboot_delay: 30
+  when: "'changed' in (adds_forest_install.stdout | default(''))"
 
 - name: Remove the pending reboot marker after the domain controller is available
   ansible.builtin.raw: |
@@ -79,4 +72,4 @@
       Remove-Item -Path '{{ adds_pending_reboot_marker }}' -Force
     }
   changed_when: false
-  when: "'present' in adds_domain_controller_state.stdout"
+  when: "'present' in adds_domain_controller_state.stdout or 'changed' in (adds_forest_install.stdout | default(''))"
