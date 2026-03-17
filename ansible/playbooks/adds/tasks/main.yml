@@ -44,35 +44,18 @@
   changed_when: "'changed' in adds_safe_mode_password.stdout"
 
 - name: Promote the host into a new forest when AD DS is not yet configured
-  ansible.builtin.raw: |
-    $safeModePassword = ConvertTo-SecureString (Get-Content '{{ adds_safe_mode_password_path }}' -Raw) -AsPlainText -Force
-    Install-ADDSForest `
-      -DomainName '{{ adds_domain_name }}' `
-      -DomainNetbiosName '{{ adds_domain_netbios_name }}' `
-      -InstallDNS:$true `
-      -SafeModeAdministratorPassword $safeModePassword `
-      -Force:$true `
-      -NoRebootOnCompletion:$true
-    Set-Content -Path '{{ adds_pending_reboot_marker }}' -Value 'pending reboot for domain promotion' -NoNewline
-    'changed'
+  microsoft.ad.domain_controller:
+    state: domain_controller
+    dns_domain_name: '{{ adds_domain_name }}'
+    install_dns: true
+    domain_admin_user: '{{ adds_domain_admin_user }}'
+    domain_admin_password: '{{ adds_domain_admin_password }}'
+    safe_mode_password: "{{ lookup('ansible.builtin.file', adds_safe_mode_password_path) | trim }}"
+    reboot: true
+    reboot_timeout: '{{ adds_promotion_reboot_timeout }}'
   register: adds_forest_install
-  changed_when: "'changed' in adds_forest_install.stdout"
+  no_log: true
   when: "'absent' in adds_domain_controller_state.stdout"
-
-- name: Reboot after initial domain promotion
-  ansible.builtin.raw: |
-    Restart-Computer -Force
-  failed_when: false
-  changed_when: false
-  when: "'changed' in (adds_forest_install.stdout | default(''))"
-
-- name: Wait for host after domain promotion reboot
-  ansible.builtin.wait_for_connection:
-    timeout: 3600
-    sleep: 15
-    delay: 120
-    connect_timeout: 60
-  when: "'changed' in (adds_forest_install.stdout | default(''))"
 
 - name: Remove the pending reboot marker after the domain controller is available
   ansible.builtin.raw: |
@@ -80,4 +63,4 @@
       Remove-Item -Path '{{ adds_pending_reboot_marker }}' -Force
     }
   changed_when: false
-  when: "'present' in adds_domain_controller_state.stdout or 'changed' in (adds_forest_install.stdout | default(''))"
+  when: "'present' in adds_domain_controller_state.stdout or (adds_forest_install is defined and (adds_forest_install.changed | default(false)))"
