@@ -3,8 +3,8 @@
 adds_domain_name: "{{ domain_name | default('corp.offsec.local') }}"
 adds_domain_netbios_name: "{{ (adds_domain_name.split('.')[0] | upper)[:15] }}"
 adds_log_directory: 'C:\ProgramData\OffSec\EnterpriseBootstrap'
-adds_safe_mode_password_path: "{{ adds_log_directory }}\\adds-safe-mode-password.txt"
-adds_pending_reboot_marker: "{{ adds_log_directory }}\\pending-reboot-adds.txt"
 adds_domain_admin_user: "{{ domain_admin_user | default(hostvars[inventory_hostname].ansible_user | default(ansible_user)) }}"
 adds_domain_admin_password: "{{ domain_admin_password | default(hostvars[inventory_hostname].ansible_password | default(ansible_password)) }}"
+adds_safe_mode_password: "{{ safe_mode_password | default(adds_domain_admin_password) }}"
 adds_promotion_reboot_timeout: 3600
+adds_no_log_promotion: true

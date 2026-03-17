@@ -30,37 +30,13 @@
   register: adds_feature_install
   changed_when: "'changed' in adds_feature_install.stdout"
 
-- name: Ensure a DSRM safe mode password is available for the first forest promotion
-  ansible.builtin.raw: |
-    if (Test-Path '{{ adds_safe_mode_password_path }}') {
-      'unchanged'
-    }
-    else {
-      $password = ([guid]::NewGuid().ToString('N') + 'Aa!9')
-      Set-Content -Path '{{ adds_safe_mode_password_path }}' -Value $password -NoNewline
-      'changed'
-    }
-  register: adds_safe_mode_password
-  changed_when: "'changed' in adds_safe_mode_password.stdout"
-
-- name: Promote the host into a new forest when AD DS is not yet configured
-  microsoft.ad.domain_controller:
-    state: domain_controller
+- name: Create a new AD forest when AD DS is not yet configured
+  microsoft.ad.domain:
     dns_domain_name: '{{ adds_domain_name }}'
-    install_dns: true
-    domain_admin_user: '{{ adds_domain_admin_user }}'
-    domain_admin_password: '{{ adds_domain_admin_password }}'
-    safe_mode_password: "{{ lookup('ansible.builtin.file', adds_safe_mode_password_path) | trim }}"
+    domain_netbios_name: '{{ adds_domain_netbios_name }}'
+    safe_mode_password: '{{ adds_safe_mode_password }}'
     reboot: true
     reboot_timeout: '{{ adds_promotion_reboot_timeout }}'
   register: adds_forest_install
-  no_log: true
+  no_log: "{{ adds_no_log_promotion | bool }}"
   when: "'absent' in adds_domain_controller_state.stdout"
-
-- name: Remove the pending reboot marker after the domain controller is available
-  ansible.builtin.raw: |
-    if (Test-Path '{{ adds_pending_reboot_marker }}') {
-      Remove-Item -Path '{{ adds_pending_reboot_marker }}' -Force
-    }
-  changed_when: false
-  when: "'present' in adds_domain_controller_state.stdout or (adds_forest_install is defined and (adds_forest_install.changed | default(false)))"
